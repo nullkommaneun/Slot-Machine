@@ -39,11 +39,12 @@ function makePRNG(seedStr){
   }
 }
 let rnd = makePRNG(STATE.seed);
+function r(min,max){ return min + Math.random()*(max-min); } // UI randomness (not seeded)
 
 function weightedPick(){
   const total = SYMBOLS.reduce((a,s)=>a+s.weight,0);
-  let r = rnd()*total;
-  for(const s of SYMBOLS){ if((r-=s.weight)<=0) return s.id; }
+  let v = rnd()*total;
+  for(const s of SYMBOLS){ if((v-=s.weight)<=0) return s.id; }
   return SYMBOLS[SYMBOLS.length-1].id;
 }
 function getSym(id){ return SYMBOLS.find(s=>s.id===id); }
@@ -68,13 +69,15 @@ seedEl.textContent = STATE.seed;
 const reelNodes = [];
 const STRIP_LEN = 40;
 const SYMBOL_H = 60;
-for(let r=0;r<STATE.reels;r++){
+for(let rI=0;rI<STATE.reels;rI++){
   const reel = document.createElement('div');
   reel.className = 'reel';
   const symbolsWrap = document.createElement('div');
   symbolsWrap.className = 'symbols';
   reel.appendChild(symbolsWrap);
 
+  // leichte zufällige Durchmischung: beginne jede Walze mit anderem Offset
+  const startShift = Math.floor(Math.random()*SYMBOLS.length);
   for(let i=0;i<STRIP_LEN;i++){
     const id = weightedPick();
     const div = document.createElement('div');
@@ -85,6 +88,11 @@ for(let r=0;r<STATE.reels;r++){
     div.textContent = sym.emoji;
     symbolsWrap.appendChild(div);
   }
+  // optional: zyklisch rotieren
+  if(startShift){
+    for(let s=0;s<startShift;s++){ symbolsWrap.appendChild(symbolsWrap.firstChild); }
+  }
+
   reelsEl.appendChild(reel);
   reelNodes.push({reel, symbols:symbolsWrap, offsetPx:0, topIndex:0});
 }
@@ -155,7 +163,7 @@ function autoscale(){
 window.addEventListener('resize', autoscale);
 window.addEventListener('orientationchange', autoscale);
 
-// --- Audio: Abfallende Tonleiter während Spin ---
+// --- Audio: Variation & Tempo-Jitter ---
 let audioCtx = null;
 let spinActive = false;
 let spinTimer = null;
@@ -168,8 +176,8 @@ function ensureAudio(){
   if(audioCtx.state === 'suspended'){ audioCtx.resume(); }
 }
 
-// Spielt einen kurzen „plucked“ Ton (saw → lowpass → gain env)
-function playNote(freq=880, dur=0.12){
+// kurzer „plucked“ Ton
+function playNote(freq=880, dur=0.10){
   ensureAudio();
   const osc1 = audioCtx.createOscillator();
   const osc2 = audioCtx.createOscillator();
@@ -177,7 +185,7 @@ function playNote(freq=880, dur=0.12){
   osc1.frequency.value = freq; osc2.frequency.value = freq*1.01;
 
   const lp = audioCtx.createBiquadFilter();
-  lp.type = 'lowpass'; lp.frequency.value = 1400; lp.Q.value = 0.6;
+  lp.type = 'lowpass'; lp.frequency.value = 1300; lp.Q.value = 0.7;
 
   const gain = audioCtx.createGain();
   gain.gain.value = 0.0001;
@@ -186,50 +194,37 @@ function playNote(freq=880, dur=0.12){
   lp.connect(gain); gain.connect(audioCtx.destination);
 
   const now = audioCtx.currentTime;
-  gain.gain.exponentialRampToValueAtTime(0.05, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.05, now + 0.015);
   gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
   osc1.start(now); osc2.start(now);
   osc1.stop(now + dur + 0.02); osc2.stop(now + dur + 0.02);
 }
 
-// Erzeugt eine fallende Tonleiter (z. B. 8 Stufen), wiederholt solange spinActive=true
-const SCALE_STEPS = 8;
-const STEP_INTERVAL_MS = 110; // Tempo
-const BASE_FREQ = 1200; // Startfrequenz
 const SEMITONE = 2 ** (1/12);
-
 function scheduleDescendingScale(){
   if(!spinActive) return;
-  // 8 Stufen abwärts über eine Moll-Pentatonik-ähnliche Auswahl für „casino vibe“
-  // Wir nutzen gleichmäßige Halbtöne für Einfachheit
-  for(let i=0;i<SCALE_STEPS;i++){
-    const f = BASE_FREQ / (SEMITONE ** i);
-    setTimeout(()=>{ if(spinActive) playNote(f, 0.10); }, i*STEP_INTERVAL_MS);
+  // zufällige Länge und Basisfrequenz je Loop
+  const steps = Math.floor(r(6, 10)); // 6..9 Schritte
+  const base = r(950, 1400);
+  let t = 0;
+  for(let i=0;i<steps;i++){
+    const jitter = r(-20, 20); // ±20ms
+    const interval = r(70, 120) + jitter;
+    const f = base / (SEMITONE ** i);
+    setTimeout(()=>{ if(spinActive) playNote(f, 0.09); }, t);
+    t += interval;
   }
-  // Nächste Runde nach letztem Step
-  spinTimer = setTimeout(()=>{
-    if(spinActive) scheduleDescendingScale();
-  }, SCALE_STEPS*STEP_INTERVAL_MS + 10);
+  spinTimer = setTimeout(()=>{ if(spinActive) scheduleDescendingScale(); }, t + 30);
 }
 
-function startSpinSound(){
-  ensureAudio();
-  stopSpinSound();
-  spinActive = true;
-  scheduleDescendingScale();
-}
+function startSpinSound(){ ensureAudio(); stopSpinSound(); spinActive = true; scheduleDescendingScale(); }
+function stopSpinSound(){ spinActive = false; if(spinTimer){ clearTimeout(spinTimer); spinTimer = null; } }
 
-function stopSpinSound(){
-  spinActive = false;
-  if(spinTimer){ clearTimeout(spinTimer); spinTimer = null; }
-}
-
-// Tick beim Walzenstopp
 function tickStop(){
   ensureAudio();
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-  osc.type = 'square'; osc.frequency.value = 900;
+  osc.type = 'square'; osc.frequency.value = 900 + (Math.random()*80-40);
   gain.gain.value = 0.05;
   osc.connect(gain); gain.connect(audioCtx.destination);
   const now = audioCtx.currentTime;
@@ -238,11 +233,11 @@ function tickStop(){
   osc.stop(now + 0.08);
 }
 
-// Gewinnklang
 function winChime(mult=1){
   ensureAudio();
-  const base = 880; // A5
-  const freqs = [base, base*5/4, base*3/2];
+  const base = 880;
+  const shift = Math.random()>0.5 ? 1 : -1;
+  const freqs = [base, base*5/4, base*3/2].map(f=> f * (1 + 0.02*shift));
   const now = audioCtx.currentTime;
   freqs.forEach((f,i)=>{
     const osc = audioCtx.createOscillator();
@@ -257,7 +252,13 @@ function winChime(mult=1){
   });
 }
 
-// --- Spin ---
+// --- Spin (schneller & zufälliger) ---
+function shuffledIndices(n){
+  const arr = Array.from({length:n}, (_,i)=>i);
+  for(let i=n-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
+  return arr;
+}
+
 async function spin(){
   if(STATE.spinning) return;
   const bet = Math.max(1, Math.floor(Number(betInput.value)||1));
@@ -266,8 +267,17 @@ async function spin(){
 
   setCredits(STATE.credits - bet); STATE.totalIn += bet;
 
-  const DURATION_BASE = 1100; const STAGGER = 180;
-  const anim = reelNodes.map((rn,i)=>({ start: performance.now()+i*STAGGER, duration: DURATION_BASE + i*160 + (rnd()*220|0), lastPx:0 }));
+  const ORDER = shuffledIndices(STATE.reels); // zufällige Start-/Stopp-Reihenfolge
+  const BASE = 780; // schneller
+  const STAGGER = 120; // enger
+  const anim = reelNodes.map((rn,i)=>{
+    const orderIdx = ORDER.indexOf(i);
+    return {
+      start: performance.now() + orderIdx*STAGGER + r(-40, 60),
+      duration: BASE + orderIdx*120 + r(0,180),
+      lastPx: 0
+    };
+  });
 
   startSpinSound();
 
@@ -281,7 +291,8 @@ async function spin(){
           allDone = false;
           const p = Math.min(1, elapsed / a.duration);
           const ease = 1 - Math.pow(1-p, 3);
-          const spd = 12*(1 - ease) + 1.5;
+          const jitter = (Math.random()*0.8); // zusätzlicher Speed-Jitter
+          const spd = (12.5*(1 - ease) + 1.8) + jitter;
           a.lastPx = (a.lastPx + spd) % (60 * 40);
           rn.symbols.style.transform = `translateY(${-a.lastPx}px)`;
         } else {
@@ -313,7 +324,10 @@ async function spin(){
   });
 }
 
-btnSpin.addEventListener('click', async()=>{ await spin(); if(STATE.auto){ setTimeout(()=>btnSpin.click(), 250); } });
+btnSpin.addEventListener('click', async()=>{ 
+  await spin(); 
+  if(STATE.auto){ setTimeout(()=>btnSpin.click(), Math.floor(r(160, 360))); } // zufällige Auto-Pause
+});
 btnAuto.addEventListener('click', ()=>{ STATE.auto=!STATE.auto; btnAuto.textContent = `Auto: ${STATE.auto?'An':'Aus'}`; if(STATE.auto && !STATE.spinning){ btnSpin.click(); } });
 btnSeed.addEventListener('click', ()=>{ setSeed(String(Math.floor(Math.random()*1e9))); log('Neuer Seed gesetzt.'); });
 
