@@ -70,6 +70,8 @@ seedEl.textContent = STATE.seed;
 
 // Reels vorbereiten (Emoji als Text)
 const reelNodes = [];
+const STRIP_LEN = 40;
+const SYMBOL_H = 60;
 for(let r=0;r<STATE.reels;r++){
   const reel = document.createElement('div');
   reel.className = 'reel';
@@ -77,7 +79,6 @@ for(let r=0;r<STATE.reels;r++){
   symbolsWrap.className = 'symbols';
   reel.appendChild(symbolsWrap);
 
-  const STRIP_LEN = 40;
   for(let i=0;i<STRIP_LEN;i++){
     const id = weightedPick();
     const div = document.createElement('div');
@@ -89,7 +90,7 @@ for(let r=0;r<STATE.reels;r++){
     symbolsWrap.appendChild(div);
   }
   reelsEl.appendChild(reel);
-  reelNodes.push({reel, symbols:symbolsWrap, offset:0});
+  reelNodes.push({reel, symbols:symbolsWrap, offsetPx:0, topIndex:0});
 }
 
 function setCredits(v){ STATE.credits = v; localStorage.setItem('slot_credits', String(v)); creditsEl.textContent = v; }
@@ -97,43 +98,49 @@ function setLastWin(v){ STATE.lastWin = v; lastWinEl.textContent = v; }
 function setSeed(newSeed){ STATE.seed = newSeed; localStorage.setItem('slot_seed', String(newSeed)); seedEl.textContent = newSeed; rnd = makePRNG(newSeed); }
 function log(msg){ const time = new Date().toLocaleTimeString(); logEl.innerHTML = `<div><b>${time}</b> – ${msg}</div>` + logEl.innerHTML; }
 
-// Sichtbare IDs pro Reel/Row anhand von Geometrie ermitteln
-function visibleGrid(){
+// Grid deterministisch aus topIndex ableiten (keine Layout-Messung mehr)
+function currentGrid(){
   const grid = []; // [reel][row]
   for(const rn of reelNodes){
-    const rect = rn.reel.getBoundingClientRect();
-    const rowCenters = [rect.top+30, rect.top+90, rect.top+150];
-    const ids = [null,null,null];
-    const symbols = [...rn.symbols.children];
-    for(const s of symbols){
-      const r = s.getBoundingClientRect();
-      const cy = r.top + r.height/2;
-      let best=0, dmin=1e9;
-      for(let row=0;row<3;row++){ const d=Math.abs(cy-rowCenters[row]); if(d<dmin){dmin=d; best=row;} }
-      // nimm den jeweils näheren
-      if(ids[best]==null || dmin < 1e9){ ids[best] = s.dataset.id; }
-    }
-    grid.push(ids.map(id=>id||'KIR'));
+    const top = ((rn.topIndex % STRIP_LEN) + STRIP_LEN) % STRIP_LEN;
+    const ids = [
+      rn.symbols.children[(top + 0) % STRIP_LEN].dataset.id,
+      rn.symbols.children[(top + 1) % STRIP_LEN].dataset.id,
+      rn.symbols.children[(top + 2) % STRIP_LEN].dataset.id,
+    ];
+    grid.push(ids);
   }
   return grid;
+}
+
+// Längste zusammenhängende Serie irgendwo auf der Linie finden (nicht links-gebunden)
+function bestRunOnLine(seq){
+  let bestLen = 1, bestSym = seq[0], curLen = 1;
+  for(let i=1;i<seq.length;i++){
+    if(seq[i] === seq[i-1]){
+      curLen++;
+    } else {
+      if(curLen > bestLen){ bestLen = curLen; bestSym = seq[i-1]; }
+      curLen = 1;
+    }
+  }
+  if(curLen > bestLen){ bestLen = curLen; bestSym = seq[seq.length-1]; }
+  return { len: bestLen, sym: bestSym };
 }
 
 function evaluateLines(grid, bet){
   let totalWin = 0; const hits = [];
   LINES.forEach((rows, lineIdx)=>{
-    const seq = rows.map((row, col)=> grid[col][row]);
-    let count = 1; let sym = seq[0];
-    for(let i=1;i<seq.length;i++){
-      if(seq[i]===sym) count++; else break;
-    }
-    if(count>=3){
+    const seq = rows.map((row, col)=> grid[col][row]); // 5 Symbole entlang der Linie
+    const { len, sym } = bestRunOnLine(seq);
+    if(len >= 3){
       let mult = 0;
-      if(count===3) mult = 1;
-      else if(count===4) mult = Math.floor((PAYOUTS[sym]||0) * 0.3);
-      else if(count===5) mult = (PAYOUTS[sym]||0);
+      if(len===3) mult = 1;
+      else if(len===4) mult = Math.floor((PAYOUTS[sym]||0) * 0.3);
+      else if(len===5) mult = (PAYOUTS[sym]||0);
       const win = mult * bet;
       totalWin += win;
-      hits.push({lineIdx, sym, count, mult, win, pattern: seq.join(' | ')});
+      hits.push({lineIdx, sym, count: len, mult, win, pattern: seq.join(' | ')});
     }
   });
   return { totalWin, hits };
@@ -147,8 +154,8 @@ async function spin(){
 
   setCredits(STATE.credits - bet); STATE.totalIn += bet;
 
-  const DURATION_BASE = 1100; const STAGGER = 180; // etwas kürzer, angenehmer auf Mobile
-  const anim = reelNodes.map((rn,i)=>({ start: performance.now()+i*STAGGER, duration: DURATION_BASE + i*160 + (rnd()*220|0), last:0, height:60, stripLen: rn.symbols.children.length }));
+  const DURATION_BASE = 1100; const STAGGER = 180; // angenehmer auf Mobile
+  const anim = reelNodes.map((rn,i)=>({ start: performance.now()+i*STAGGER, duration: DURATION_BASE + i*160 + (rnd()*220|0), lastPx:0 }));
 
   return new Promise(resolve=>{
     function frame(t){
@@ -161,16 +168,19 @@ async function spin(){
           const p = Math.min(1, elapsed / a.duration);
           const ease = 1 - Math.pow(1-p, 3);
           const spd = 12*(1 - ease) + 1.5;
-          a.last = (a.last + spd) % (a.height * a.stripLen);
-          rn.symbols.style.transform = `translateY(${-a.last}px)`;
+          a.lastPx = (a.lastPx + spd) % (SYMBOL_H * STRIP_LEN);
+          rn.symbols.style.transform = `translateY(${-a.lastPx}px)`;
         } else {
-          const mod = a.last % a.height; const snap = a.last - mod + (mod > a.height/2 ? a.height : 0);
+          // auf Symbolkante snappen und topIndex berechnen
+          const mod = a.lastPx % SYMBOL_H;
+          const snap = a.lastPx - mod + (mod > SYMBOL_H/2 ? SYMBOL_H : 0);
           rn.symbols.style.transform = `translateY(${-snap}px)`;
+          rn.topIndex = Math.round(snap / SYMBOL_H) % STRIP_LEN;
         }
       }
       if(!allDone){ requestAnimationFrame(frame); }
       else {
-        const grid = visibleGrid();
+        const grid = currentGrid();
         const { totalWin, hits } = evaluateLines(grid, bet);
         setLastWin(totalWin); STATE.totalOut += totalWin; setCredits(STATE.credits + totalWin);
         const rtp = STATE.totalIn ? (STATE.totalOut/STATE.totalIn*100).toFixed(1)+'%' : '–';
