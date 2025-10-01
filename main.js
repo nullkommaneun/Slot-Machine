@@ -2,18 +2,13 @@
 const SYMBOLS = [
   { id:'KIR',    weight: 30, emoji:'🍒', label:'Kirsche' },
   { id:'ZIT',    weight: 24, emoji:'🍋', label:'Zitrone' },
-  { id:'HUF',    weight: 16, emoji:'🧲', label:'Hufeisen' }, // Ersatz mangels Hufeisen-Emoji
+  { id:'HUF',    weight: 16, emoji:'🧲', label:'Hufeisen' },
   { id:'KLEE',   weight: 10, emoji:'☘️', label:'Kleeblatt' },
   { id:'SIEBEN', weight:  4, emoji:'7️⃣', label:'Sieben' },
 ];
 const PAYOUTS = { SIEBEN:100, KLEE:50, HUF:25, ZIT:10, KIR:5 };
-// Gewinnlinien (Index je Walze → Zeile 0/1/2)
 const LINES = [
-  [0,0,0,0,0], // oben
-  [1,1,1,1,1], // mitte
-  [2,2,2,2,2], // unten
-  [0,1,2,1,0], // diagonal ↘︎
-  [2,1,0,1,2], // diagonal ↗︎
+  [0,0,0,0,0], [1,1,1,1,1], [2,2,2,2,2], [0,1,2,1,0], [2,1,0,1,2],
 ];
 
 // === Zustand ===
@@ -54,6 +49,7 @@ function weightedPick(){
 function getSym(id){ return SYMBOLS.find(s=>s.id===id); }
 
 // DOM Referenzen
+const scaleWrap = document.getElementById('scale-wrap');
 const reelsEl = document.getElementById('reels');
 const creditsEl = document.getElementById('credits');
 const lastWinEl = document.getElementById('lastWin');
@@ -98,7 +94,7 @@ function setLastWin(v){ STATE.lastWin = v; lastWinEl.textContent = v; }
 function setSeed(newSeed){ STATE.seed = newSeed; localStorage.setItem('slot_seed', String(newSeed)); seedEl.textContent = newSeed; rnd = makePRNG(newSeed); }
 function log(msg){ const time = new Date().toLocaleTimeString(); logEl.innerHTML = `<div><b>${time}</b> – ${msg}</div>` + logEl.innerHTML; }
 
-// Grid deterministisch aus topIndex ableiten (keine Layout-Messung mehr)
+// Grid deterministisch
 function currentGrid(){
   const grid = []; // [reel][row]
   for(const rn of reelNodes){
@@ -113,16 +109,12 @@ function currentGrid(){
   return grid;
 }
 
-// Längste zusammenhängende Serie irgendwo auf der Linie finden (nicht links-gebunden)
+// längste Serie auf Linie (nicht links-gebunden)
 function bestRunOnLine(seq){
   let bestLen = 1, bestSym = seq[0], curLen = 1;
   for(let i=1;i<seq.length;i++){
-    if(seq[i] === seq[i-1]){
-      curLen++;
-    } else {
-      if(curLen > bestLen){ bestLen = curLen; bestSym = seq[i-1]; }
-      curLen = 1;
-    }
+    if(seq[i] === seq[i-1]){ curLen++; }
+    else { if(curLen > bestLen){ bestLen = curLen; bestSym = seq[i-1]; } curLen = 1; }
   }
   if(curLen > bestLen){ bestLen = curLen; bestSym = seq[seq.length-1]; }
   return { len: bestLen, sym: bestSym };
@@ -131,7 +123,7 @@ function bestRunOnLine(seq){
 function evaluateLines(grid, bet){
   let totalWin = 0; const hits = [];
   LINES.forEach((rows, lineIdx)=>{
-    const seq = rows.map((row, col)=> grid[col][row]); // 5 Symbole entlang der Linie
+    const seq = rows.map((row, col)=> grid[col][row]);
     const { len, sym } = bestRunOnLine(seq);
     if(len >= 3){
       let mult = 0;
@@ -146,6 +138,29 @@ function evaluateLines(grid, bet){
   return { totalWin, hits };
 }
 
+// --- Auto-Scaler: skaliert #scale-wrap, sodass die Maschine in den Viewport passt ---
+function autoscale(){
+  // Temporär Scale 1 setzen, um natürliche Größe zu messen
+  scaleWrap.style.transform = 'scale(1)';
+  const rect = scaleWrap.getBoundingClientRect();
+  const pad = 16;
+  const availW = window.innerWidth - pad*2;
+  // Höhe: abzüglich Header (site-header). Hole dessen Höhe:
+  const header = document.querySelector('.site-header');
+  const headerH = header ? header.getBoundingClientRect().height : 0;
+  const availH = window.innerHeight - headerH - pad*2;
+
+  const sx = availW / rect.width;
+  const sy = availH / rect.height;
+  const s = Math.min(sx, sy, 1); // nicht über 1 skalieren (optional)
+
+  scaleWrap.style.transform = `translateZ(0) scale(${s})`;
+  // Zentrieren: parent (.viewport-center) übernimmt, aber wir fügen vertikale Margin hinzu, um optisch zu mitteln
+}
+window.addEventListener('resize', autoscale);
+window.addEventListener('orientationchange', autoscale);
+
+// --- Spin ---
 async function spin(){
   if(STATE.spinning) return;
   const bet = Math.max(1, Math.floor(Number(betInput.value)||1));
@@ -154,7 +169,7 @@ async function spin(){
 
   setCredits(STATE.credits - bet); STATE.totalIn += bet;
 
-  const DURATION_BASE = 1100; const STAGGER = 180; // angenehmer auf Mobile
+  const DURATION_BASE = 1100; const STAGGER = 180;
   const anim = reelNodes.map((rn,i)=>({ start: performance.now()+i*STAGGER, duration: DURATION_BASE + i*160 + (rnd()*220|0), lastPx:0 }));
 
   return new Promise(resolve=>{
@@ -168,14 +183,12 @@ async function spin(){
           const p = Math.min(1, elapsed / a.duration);
           const ease = 1 - Math.pow(1-p, 3);
           const spd = 12*(1 - ease) + 1.5;
-          a.lastPx = (a.lastPx + spd) % (SYMBOL_H * STRIP_LEN);
+          a.lastPx = (a.lastPx + spd) % (60 * 40);
           rn.symbols.style.transform = `translateY(${-a.lastPx}px)`;
         } else {
-          // auf Symbolkante snappen und topIndex berechnen
-          const mod = a.lastPx % SYMBOL_H;
-          const snap = a.lastPx - mod + (mod > SYMBOL_H/2 ? SYMBOL_H : 0);
+          const mod = a.lastPx % 60; const snap = a.lastPx - mod + (mod > 30 ? 60 : 0);
           rn.symbols.style.transform = `translateY(${-snap}px)`;
-          rn.topIndex = Math.round(snap / SYMBOL_H) % STRIP_LEN;
+          rn.topIndex = Math.round(snap / 60) % 40;
         }
       }
       if(!allDone){ requestAnimationFrame(frame); }
@@ -203,3 +216,7 @@ btnSeed.addEventListener('click', ()=>{ setSeed(String(Math.floor(Math.random()*
 
 // Init
 setCredits(STATE.credits); setLastWin(STATE.lastWin); log('Bereit. Drücke „Drehen“.');
+
+// Nach Layout fertig → skalieren
+window.addEventListener('load', autoscale);
+setTimeout(autoscale, 50); // Fallback falls Fonts/Emoji-Reflow später kommt

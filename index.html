@@ -8,57 +8,60 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="app">
+  <header class="site-header">
     <h1>Einarmiger Bandit – 5 Walzen</h1>
-    <div class="sub">Symbole (Emojis): 🍒, 🍋, 🧲 (Hufeisen-Ersatz), ☘️, 7️⃣. Mindestens 3 gleiche von links. Gewinne auf: oben, Mitte, unten, diagonal ↘︎ und diagonal ↗︎. Linien werden nicht angezeigt.</div>
+    <p class="sub">Emojis: 🍒, 🍋, 🧲, ☘️, 7️⃣ · Mindestens 3 gleiche · Linien: oben, Mitte, unten, ↘︎, ↗︎</p>
+  </header>
 
-    <div class="machine" id="machine">
-      <div class="status">
-        <div class="left">
-          <div class="chip"><strong id="credits">1000</strong><span>Credits</span></div>
-          <div class="chip"><strong id="lastWin">0</strong><span>Letzter Gewinn</span></div>
-          <div class="chip"><strong id="rtp">–</strong><span>RTP (Session)</span></div>
+  <main class="viewport-center">
+    <div id="scale-wrap">
+      <div class="machine" id="machine">
+        <div class="status">
+          <div class="left">
+            <div class="chip"><strong id="credits">1000</strong><span>Credits</span></div>
+            <div class="chip"><strong id="lastWin">0</strong><span>Letzter Gewinn</span></div>
+            <div class="chip"><strong id="rtp">–</strong><span>RTP (Session)</span></div>
+          </div>
+          <div class="chip" title="Seed für reproduzierbare Tests"><strong id="seed">–</strong><span>RNG Seed</span></div>
         </div>
-        <div class="chip" title="Seed für reproduzierbare Tests"><strong id="seed">–</strong><span>RNG Seed</span></div>
-      </div>
 
-      <div class="stage">
-        <div class="reels" id="reels"></div>
-        <!-- keine sichtbaren Paylines -->
-      </div>
+        <div class="stage">
+          <div class="reels" id="reels"></div>
+        </div>
 
-      <div class="controls">
-        <div class="left-ctrl">
-          <button class="btn" id="btnSeed">Seed neu</button>
-          <div class="bet">
-            <label for="bet">Einsatz</label>
-            <input id="bet" type="number" min="1" step="1" value="10" />
+        <div class="controls">
+          <div class="left-ctrl">
+            <button class="btn" id="btnSeed">Seed neu</button>
+            <div class="bet">
+              <label for="bet">Einsatz</label>
+              <input id="bet" type="number" min="1" step="1" value="10" />
+            </div>
+          </div>
+          <div>
+            <button class="btn" id="btnAuto">Auto: Aus</button>
+            <button class="btn primary" id="btnSpin">Drehen</button>
           </div>
         </div>
-        <div>
-          <button class="btn" id="btnAuto">Auto: Aus</button>
-          <button class="btn primary" id="btnSpin">Drehen</button>
+
+        <div class="log" id="log"></div>
+
+        <div class="payouts">
+          <table>
+            <thead><tr><th>Kombination (pro Gewinnlinie)</th><th>Auszahlung × Einsatz</th></tr></thead>
+            <tbody>
+              <tr><td>5× 7️⃣</td><td>100×</td></tr>
+              <tr><td>5× ☘️</td><td>50×</td></tr>
+              <tr><td>5× 🧲 (Hufeisen-Ersatz)</td><td>25×</td></tr>
+              <tr><td>5× 🍋</td><td>10×</td></tr>
+              <tr><td>5× 🍒</td><td>5×</td></tr>
+              <tr><td>4 gleiche (beliebige Position)</td><td>30% des 5er-Werts</td></tr>
+              <tr><td>3 gleiche (beliebige Position)</td><td>1×</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
-
-      <div class="log" id="log"></div>
-
-      <div class="payouts">
-        <table>
-          <thead><tr><th>Kombination (pro Gewinnlinie)</th><th>Auszahlung × Einsatz</th></tr></thead>
-          <tbody>
-            <tr><td>5× 7️⃣</td><td>100×</td></tr>
-            <tr><td>5× ☘️</td><td>50×</td></tr>
-            <tr><td>5× 🧲 (Hufeisen-Ersatz)</td><td>25×</td></tr>
-            <tr><td>5× 🍋</td><td>10×</td></tr>
-            <tr><td>5× 🍒</td><td>5×</td></tr>
-            <tr><td>4 gleiche (links anliegend)</td><td>30% des 5er-Werts</td></tr>
-            <tr><td>3 gleiche (links anliegend)</td><td>1×</td></tr>
-          </tbody>
-        </table>
-      </div>
     </div>
-  </div>
+  </main>
 
   <script defer src="main.js"></script>
 </body>
