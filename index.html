@@ -10,7 +10,7 @@
 <body>
   <header class="site-header">
     <h1>Einarmiger Bandit – 5 Walzen</h1>
-    <p class="sub">Emojis: 🍒, 🍋, 🧲, ☘️, 7️⃣ · Mindestens 3 gleiche · Linien: oben, Mitte, unten, ↘︎, ↗︎</p>
+    <p class="sub">Symbole: Kirsche, Zitrone, Hufeisen, Kleeblatt, Sieben · Mindestens 3 gleiche · Linien: oben, Mitte, unten, ↘︎, ↗︎</p>
   </header>
 
   <main class="viewport-center">
@@ -26,7 +26,7 @@
         </div>
 
         <div class="stage">
-          <div class="reels hidden" id="reels" aria-busy="true"></div>
+          <div class="reels" id="reels"></div>
           <div class="hit-overlay" id="hitOverlay" aria-hidden="true"></div>
         </div>
 
@@ -50,11 +50,11 @@
           <table>
             <thead><tr><th>Kombination (pro Gewinnlinie)</th><th>Auszahlung × Einsatz</th></tr></thead>
             <tbody>
-              <tr><td>5× 7️⃣</td><td>100×</td></tr>
-              <tr><td>5× ☘️</td><td>50×</td></tr>
-              <tr><td>5× 🧲 (Hufeisen-Ersatz)</td><td>25×</td></tr>
-              <tr><td>5× 🍋</td><td>10×</td></tr>
-              <tr><td>5× 🍒</td><td>5×</td></tr>
+              <tr><td>5× Sieben</td><td>100×</td></tr>
+              <tr><td>5× Kleeblatt</td><td>50×</td></tr>
+              <tr><td>5× Hufeisen</td><td>25×</td></tr>
+              <tr><td>5× Zitrone</td><td>10×</td></tr>
+              <tr><td>5× Kirsche</td><td>5×</td></tr>
               <tr><td>4 gleiche (beliebige Position)</td><td>30% des 5er-Werts</td></tr>
               <tr><td>3 gleiche (beliebige Position)</td><td>1×</td></tr>
             </tbody>
@@ -64,7 +64,7 @@
     </div>
   </main>
 
-  <!-- Offscreen-Prebuffer: erzeugt Emoji-Render im Voraus -->
+  <!-- Prebuffer für Bild-Decoding -->
   <div id="prebuffer" aria-hidden="true"></div>
 
   <script defer src="main.js"></script>

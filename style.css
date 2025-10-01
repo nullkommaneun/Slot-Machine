@@ -5,15 +5,9 @@
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
-  margin:0; 
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji','EmojiOne Color','Twemoji Mozilla','Segoe UI Symbol',sans-serif; 
-  color:#e6edf3;
+  margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; color:#e6edf3;
   background:radial-gradient(1200px 700px at 50% -10%, #1b2330 0%, #0b0f14 60%);
-  display:flex; flex-direction:column;
-  min-height:100svh;
-  text-rendering:optimizeLegibility;
-  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
-  font-synthesis-weight:none; font-synthesis-style:none;
+  display:flex; flex-direction:column; min-height:100svh;
 }
 .site-header{ padding: var(--pad); text-align:center }
 .site-header h1{ margin:0 0 6px 0; font-weight:700; letter-spacing:.5px }
@@ -21,10 +15,8 @@ body{
 
 .viewport-center{ flex:1; display:grid; place-items:center; padding: var(--pad); }
 
-/* --- Scaler --- */
 #scale-wrap{ transform-origin: top center; will-change: transform; }
 
-/* --- Machine (Base size) --- */
 .machine{ background:linear-gradient(180deg,#15202b 0%,#0e141b 100%); border:1px solid #263243; border-radius:18px; padding:14px; box-shadow:0 10px 30px rgba(0,0,0,.35) }
 .status{ display:flex; gap:12px; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap }
 .status .left{ display:flex; gap:12px; align-items:center; flex-wrap:wrap }
@@ -33,29 +25,15 @@ body{
 .chip span{ color:var(--muted); font-size:12px }
 
 .stage{ position:relative; }
-.reels{ 
-  display:grid; grid-template-columns: repeat(5,1fr); 
-  gap:6px; padding:8px; border-radius:16px; 
-  background:#0b121b; border:1px solid #1f2a3a; 
-  width:520px; margin-inline:auto; 
-  will-change:transform;
-}
-.reels.hidden{ visibility:hidden }
-.reel{ 
-  height:180px; overflow:hidden; position:relative; border-radius:10px; 
-  background:#0a1018; border:1px solid #1c2736; 
-  box-shadow:inset 0 8px 18px rgba(0,0,0,.35);
-  will-change:transform;
-}
+.reels{ display:grid; grid-template-columns: repeat(5,1fr); gap:6px; padding:8px; border-radius:16px; background:#0b121b; border:1px solid #1f2a3a; width:520px; margin-inline:auto }
+.reel{ height:180px; overflow:hidden; position:relative; border-radius:10px; background:#0a1018; border:1px solid #1c2736; box-shadow:inset 0 8px 18px rgba(0,0,0,.35) }
 .reel::after{ content:""; position:absolute; top:0; bottom:0; right:-3px; width:3px; background: linear-gradient(180deg,transparent, rgba(255,255,255,.06), transparent); }
-
 .symbols{ position:absolute; left:0; right:0; will-change:transform; backface-visibility:hidden; transform:translateZ(0) }
 .symbol{ height:60px; display:flex; align-items:center; justify-content:center; border-bottom:1px solid #0f1824; contain:content }
 .symbol:nth-child(odd){ background:rgba(255,255,255,.02) }
-.symbol{ font-size:34px; line-height:1; font-variant-emoji:emoji; }
-@media (min-width:420px){ .symbol{ font-size:36px; } }
+.symbol img.glyph{ width:44px; height:44px; image-rendering:auto; object-fit:contain; }
 
-/* Gewinn-Overlay */
+/* Overlay */
 .hit-overlay{ position:absolute; inset:8px; display:grid; grid-template-rows: repeat(3, 60px); grid-template-columns: repeat(5, 1fr); gap:6px; pointer-events:none; }
 .hit-overlay .hit{ border-radius:10px; box-shadow: inset 0 0 0 0 rgba(29,209,161,0); transition: box-shadow .15s ease; }
 .hit-overlay .hit.active{ box-shadow: inset 0 0 0 3px rgba(29,209,161,.85), 0 0 12px rgba(29,209,161,.35); }
@@ -85,5 +63,4 @@ body{
 .payouts th, .payouts td{ padding:8px 10px; border-bottom:1px solid #1b2637; text-align:left }
 .payouts tr:nth-child(odd){ background:#0c131c }
 
-/* Offscreen-Prebuffer: minimal sichtbar für Font-Raster, aber außerhalb des Viewports */
 #prebuffer{ position:fixed; left:-10000px; top:-10000px; width:0; height:0; overflow:hidden; white-space:nowrap; }
