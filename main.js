@@ -138,27 +138,119 @@ function evaluateLines(grid, bet){
   return { totalWin, hits };
 }
 
-// --- Auto-Scaler: skaliert #scale-wrap, sodass die Maschine in den Viewport passt ---
+// --- Auto-Scaler ---
 function autoscale(){
-  // Temporär Scale 1 setzen, um natürliche Größe zu messen
   scaleWrap.style.transform = 'scale(1)';
   const rect = scaleWrap.getBoundingClientRect();
   const pad = 16;
-  const availW = window.innerWidth - pad*2;
-  // Höhe: abzüglich Header (site-header). Hole dessen Höhe:
   const header = document.querySelector('.site-header');
   const headerH = header ? header.getBoundingClientRect().height : 0;
+  const availW = window.innerWidth - pad*2;
   const availH = window.innerHeight - headerH - pad*2;
-
   const sx = availW / rect.width;
   const sy = availH / rect.height;
-  const s = Math.min(sx, sy, 1); // nicht über 1 skalieren (optional)
-
+  const s = Math.min(sx, sy, 1);
   scaleWrap.style.transform = `translateZ(0) scale(${s})`;
-  // Zentrieren: parent (.viewport-center) übernimmt, aber wir fügen vertikale Margin hinzu, um optisch zu mitteln
 }
 window.addEventListener('resize', autoscale);
 window.addEventListener('orientationchange', autoscale);
+
+// --- Audio: klassischer Gambling-Sound ---
+let audioCtx = null;
+let spinNodes = null;
+
+function ensureAudio(){
+  if(!audioCtx){
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new Ctx();
+  }
+  if(audioCtx.state === 'suspended'){ audioCtx.resume(); }
+}
+
+function startSpinSound(){
+  ensureAudio();
+  stopSpinSound();
+
+  // Whoosh: zwei leicht verstimmte Sägezahn-Oszillatoren + Lowpass + Gain
+  const osc1 = audioCtx.createOscillator();
+  const osc2 = audioCtx.createOscillator();
+  osc1.type = 'sawtooth'; osc2.type = 'sawtooth';
+  osc1.frequency.value = 180; osc2.frequency.value = 184;
+
+  const lfo = audioCtx.createOscillator(); // leichtes Vibrato
+  lfo.frequency.value = 4;
+  const lfoGain = audioCtx.createGain(); lfoGain.gain.value = 6; // Hz Modulation
+  lfo.connect(lfoGain);
+  lfoGain.connect(osc1.frequency);
+  lfoGain.connect(osc2.frequency);
+
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 1200; lp.Q.value = 0.7;
+
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0.0001; // Start leise
+
+  osc1.connect(lp); osc2.connect(lp);
+  lp.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  // Attack/Decay Hüllkurve
+  const now = audioCtx.currentTime;
+  gain.gain.cancelScheduledValues(now);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.06, now + 0.12);
+
+  osc1.start(); osc2.start(); lfo.start();
+
+  spinNodes = {osc1, osc2, lfo, lp, gain};
+}
+
+function stopSpinSound(){
+  if(!spinNodes || !audioCtx) return;
+  const {osc1, osc2, lfo, gain} = spinNodes;
+  const now = audioCtx.currentTime;
+  // sanft ausblenden
+  try{
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setTargetAtTime(0.0001, now, 0.06);
+  }catch(e){}
+  setTimeout(()=>{
+    try{ osc1.stop(); osc2.stop(); lfo.stop(); }catch(e){}
+    spinNodes = null;
+  }, 180);
+}
+
+function tickStop(){
+  // kurzer Tick beim Walzenstopp
+  ensureAudio();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'square'; osc.frequency.value = 900;
+  gain.gain.value = 0.05;
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  const now = audioCtx.currentTime;
+  osc.start(now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+  osc.stop(now + 0.08);
+}
+
+function winChime(mult=1){
+  ensureAudio();
+  const base = 880; // A5
+  const freqs = [base, base*5/4, base*3/2]; // Dur-Dreiklang
+  const now = audioCtx.currentTime;
+  freqs.forEach((f,i)=>{
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine'; osc.frequency.value = f;
+    gain.gain.value = 0.0001;
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(now + i*0.02);
+    gain.gain.exponentialRampToValueAtTime(0.04*Math.min(2, mult/10+1), now + i*0.02 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35 + i*0.02);
+    osc.stop(now + 0.4 + i*0.02);
+  });
+}
 
 // --- Spin ---
 async function spin(){
@@ -171,6 +263,8 @@ async function spin(){
 
   const DURATION_BASE = 1100; const STAGGER = 180;
   const anim = reelNodes.map((rn,i)=>({ start: performance.now()+i*STAGGER, duration: DURATION_BASE + i*160 + (rnd()*220|0), lastPx:0 }));
+
+  startSpinSound();
 
   return new Promise(resolve=>{
     function frame(t){
@@ -189,10 +283,13 @@ async function spin(){
           const mod = a.lastPx % 60; const snap = a.lastPx - mod + (mod > 30 ? 60 : 0);
           rn.symbols.style.transform = `translateY(${-snap}px)`;
           rn.topIndex = Math.round(snap / 60) % 40;
+          // Tick pro Walze beim Stop
+          if(!a.ticked){ tickStop(); a.ticked = true; }
         }
       }
       if(!allDone){ requestAnimationFrame(frame); }
       else {
+        stopSpinSound();
         const grid = currentGrid();
         const { totalWin, hits } = evaluateLines(grid, bet);
         setLastWin(totalWin); STATE.totalOut += totalWin; setCredits(STATE.credits + totalWin);
@@ -200,7 +297,9 @@ async function spin(){
         rtpEl.textContent = rtp;
         if(totalWin>0){
           machine.classList.remove('flash-win'); void machine.offsetWidth; machine.classList.add('flash-win');
+          const topHit = hits.reduce((a,b)=> (a && a.mult > b.mult ? a : b), null);
           hits.forEach(h=> log(`Linie ${h.lineIdx+1}: <b>${getSym(h.sym).label}</b> ×${h.count} (x${h.mult}). Gewinn: <b>${h.win}</b>.`));
+          winChime(topHit ? topHit.mult : 1);
         } else { log('Niete.'); }
         STATE.spinning = false; btnSpin.disabled = false; btnAuto.disabled = false; btnSeed.disabled = false; betInput.disabled = false;
         resolve();
@@ -215,8 +314,21 @@ btnAuto.addEventListener('click', ()=>{ STATE.auto=!STATE.auto; btnAuto.textCont
 btnSeed.addEventListener('click', ()=>{ setSeed(String(Math.floor(Math.random()*1e9))); log('Neuer Seed gesetzt.'); });
 
 // Init
+function autoscale(){
+  scaleWrap.style.transform = 'scale(1)';
+  const rect = scaleWrap.getBoundingClientRect();
+  const pad = 16;
+  const header = document.querySelector('.site-header');
+  const headerH = header ? header.getBoundingClientRect().height : 0;
+  const availW = window.innerWidth - pad*2;
+  const availH = window.innerHeight - headerH - pad*2;
+  const sx = availW / rect.width;
+  const sy = availH / rect.height;
+  const s = Math.min(sx, sy, 1);
+  scaleWrap.style.transform = `translateZ(0) scale(${s})`;
+}
 setCredits(STATE.credits); setLastWin(STATE.lastWin); log('Bereit. Drücke „Drehen“.');
-
-// Nach Layout fertig → skalieren
+window.addEventListener('resize', autoscale);
+window.addEventListener('orientationchange', autoscale);
 window.addEventListener('load', autoscale);
-setTimeout(autoscale, 50); // Fallback falls Fonts/Emoji-Reflow später kommt
+setTimeout(autoscale, 50);

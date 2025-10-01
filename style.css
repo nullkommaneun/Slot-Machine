@@ -32,14 +32,29 @@ body{
 .chip span{ color:var(--muted); font-size:12px }
 
 .stage{ position:relative; }
-.reels{ display:grid; grid-template-columns: repeat(5,1fr); gap:8px; padding:8px; border-radius:16px; background:#0b121b; border:1px solid #1f2a3a; width:560px; margin-inline:auto }
-.reel{ height:180px; overflow:hidden; position:relative; border-radius:12px; background:#0a1018; border:1px solid #1c2736; box-shadow:inset 0 8px 18px rgba(0,0,0,.35) }
+.reels{ 
+  display:grid; grid-template-columns: repeat(5,1fr); 
+  gap:6px; padding:8px; border-radius:16px; 
+  background:#0b121b; border:1px solid #1f2a3a; 
+  width:520px; margin-inline:auto 
+}
+.reel{ 
+  height:180px; overflow:hidden; position:relative; border-radius:10px; 
+  background:#0a1018; border:1px solid #1c2736; 
+  box-shadow:inset 0 8px 18px rgba(0,0,0,.35)
+}
+/* leichte seitliche Kante je Walze verbessert diagonale Lesbarkeit */
+.reel::after{
+  content:""; position:absolute; top:0; bottom:0; right:-3px; width:3px;
+  background: linear-gradient(180deg,transparent, rgba(255,255,255,.06), transparent);
+}
+
 .symbols{ position:absolute; left:0; right:0; will-change:transform }
 .symbol{ height:60px; display:flex; align-items:center; justify-content:center; border-bottom:1px solid #0f1824 }
 .symbol:nth-child(odd){ background:rgba(255,255,255,.02) }
-/* Emoji-Size: Base */
-.symbol{ font-size:34px; line-height:1; }
-@media (min-width:420px){ .symbol{ font-size:38px; } }
+/* Emoji-Size: Base, etwas kleiner wegen schmalerer Walzen */
+.symbol{ font-size:32px; line-height:1; }
+@media (min-width:420px){ .symbol{ font-size:36px; } }
 
 .controls{ display:flex; gap:10px; align-items:center; justify-content:space-between; margin-top:12px; flex-wrap:wrap }
 .left-ctrl{ display:flex; gap:10px; align-items:center }
