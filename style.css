@@ -19,11 +19,7 @@ body{
 .site-header h1{ margin:0 0 6px 0; font-weight:700; letter-spacing:.5px }
 .sub{ color:var(--muted); margin:0 auto; max-width:900px }
 
-.viewport-center{
-  flex:1;
-  display:grid; place-items:center;
-  padding: var(--pad);
-}
+.viewport-center{ flex:1; display:grid; place-items:center; padding: var(--pad); }
 
 /* --- Scaler --- */
 #scale-wrap{ transform-origin: top center; will-change: transform; }
@@ -51,37 +47,23 @@ body{
   box-shadow:inset 0 8px 18px rgba(0,0,0,.35);
   will-change:transform;
 }
-.reel::after{
-  content:""; position:absolute; top:0; bottom:0; right:-3px; width:3px;
-  background: linear-gradient(180deg,transparent, rgba(255,255,255,.06), transparent);
-}
+.reel::after{ content:""; position:absolute; top:0; bottom:0; right:-3px; width:3px; background: linear-gradient(180deg,transparent, rgba(255,255,255,.06), transparent); }
 
 .symbols{ position:absolute; left:0; right:0; will-change:transform; backface-visibility:hidden; transform:translateZ(0) }
 .symbol{ height:60px; display:flex; align-items:center; justify-content:center; border-bottom:1px solid #0f1824; contain:content }
 .symbol:nth-child(odd){ background:rgba(255,255,255,.02) }
-/* Emoji-Size */
 .symbol{ font-size:34px; line-height:1; font-variant-emoji:emoji; }
 @media (min-width:420px){ .symbol{ font-size:36px; } }
 
-/* --- Gewinnlinien-Overlay --- */
-.hit-overlay{
-  position:absolute; inset:8px;  /* deckt reels genau ab */
-  display:grid; grid-template-rows: repeat(3, 60px); grid-template-columns: repeat(5, 1fr);
-  gap:6px; pointer-events:none;
-}
-.hit-overlay .hit{
-  border-radius:10px;
-  box-shadow: inset 0 0 0 0 rgba(29,209,161,0);
-  transition: box-shadow .15s ease;
-}
-.hit-overlay .hit.active{
-  box-shadow: inset 0 0 0 3px rgba(29,209,161,.85), 0 0 12px rgba(29,209,161,.35);
-}
-.hit-overlay .hit.sym-SIEBEN.active{ box-shadow: inset 0 0 0 3px rgba(230, 126, 34, .95), 0 0 14px rgba(230,126,34,.45); }
-.hit-overlay .hit.sym-KLEE.active{   box-shadow: inset 0 0 0 3px rgba(46, 204, 113, .95), 0 0 14px rgba(46,204,113,.45); }
-.hit-overlay .hit.sym-HUF.active{    box-shadow: inset 0 0 0 3px rgba(149, 165, 166, .95), 0 0 14px rgba(149,165,166,.45); }
-.hit-overlay .hit.sym-ZIT.active{    box-shadow: inset 0 0 0 3px rgba(241, 196, 15, .95), 0 0 14px rgba(241,196,15,.45); }
-.hit-overlay .hit.sym-KIR.active{    box-shadow: inset 0 0 0 3px rgba(231, 76, 60, .95), 0 0 14px rgba(231,76,60,.45); }
+/* Gewinn-Overlay */
+.hit-overlay{ position:absolute; inset:8px; display:grid; grid-template-rows: repeat(3, 60px); grid-template-columns: repeat(5, 1fr); gap:6px; pointer-events:none; }
+.hit-overlay .hit{ border-radius:10px; box-shadow: inset 0 0 0 0 rgba(29,209,161,0); transition: box-shadow .15s ease; }
+.hit-overlay .hit.active{ box-shadow: inset 0 0 0 3px rgba(29,209,161,.85), 0 0 12px rgba(29,209,161,.35); }
+.hit-overlay .hit.sym-SIEBEN.active{ box-shadow: inset 0 0 0 3px rgba(230,126,34,.95), 0 0 14px rgba(230,126,34,.45); }
+.hit-overlay .hit.sym-KLEE.active{   box-shadow: inset 0 0 0 3px rgba(46,204,113,.95), 0 0 14px rgba(46,204,113,.45); }
+.hit-overlay .hit.sym-HUF.active{    box-shadow: inset 0 0 0 3px rgba(149,165,166,.95), 0 0 14px rgba(149,165,166,.45); }
+.hit-overlay .hit.sym-ZIT.active{    box-shadow: inset 0 0 0 3px rgba(241,196,15,.95), 0 0 14px rgba(241,196,15,.45); }
+.hit-overlay .hit.sym-KIR.active{    box-shadow: inset 0 0 0 3px rgba(231,76,60,.95), 0 0 14px rgba(231,76,60,.45); }
 
 .controls{ display:flex; gap:10px; align-items:center; justify-content:space-between; margin-top:12px; flex-wrap:wrap }
 .left-ctrl{ display:flex; gap:10px; align-items:center }
@@ -102,3 +84,6 @@ body{
 .payouts table{ width:100%; border-collapse:collapse; border:1px solid #223045; border-radius:12px; overflow:hidden }
 .payouts th, .payouts td{ padding:8px 10px; border-bottom:1px solid #1b2637; text-align:left }
 .payouts tr:nth-child(odd){ background:#0c131c }
+
+/* Offscreen-Prebuffer: minimal sichtbar für Font-Raster, aber außerhalb des Viewports */
+#prebuffer{ position:fixed; left:-10000px; top:-10000px; width:0; height:0; overflow:hidden; white-space:nowrap; }
