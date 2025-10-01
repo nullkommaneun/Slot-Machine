@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Einarmiger Bandit – 5 Walzen</title>
+  <link rel="preload" href="style.css" as="style" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <h1>Einarmiger Bandit – 5 Walzen</h1>
+    <div class="sub">Symbole: Kirsche, Zitrone, Hufeisen, Kleeblatt, 7. Fünf Gewinnlinien: oben, Mitte, unten, Diagonalen. Mindestens 3 gleiche von links.</div>
+
+    <div class="machine" id="machine">
+      <div class="status">
+        <div class="left">
+          <div class="chip"><strong id="credits">1000</strong><span>Credits</span></div>
+          <div class="chip"><strong id="lastWin">0</strong><span>Letzter Gewinn</span></div>
+          <div class="chip"><strong id="rtp">–</strong><span>RTP (Session)</span></div>
+        </div>
+        <div class="chip" title="Seed für reproduzierbare Tests"><strong id="seed">–</strong><span>RNG Seed</span></div>
+      </div>
+
+      <div class="stage">
+        <div class="reels" id="reels"></div>
+        <svg class="paylines" id="paylines" viewBox="0 0 500 180" preserveAspectRatio="none" aria-hidden="true"></svg>
+      </div>
+
+      <div class="controls">
+        <div class="left-ctrl">
+          <button class="btn" id="btnSeed">Seed neu</button>
+          <div class="bet">
+            <label for="bet">Einsatz</label>
+            <input id="bet" type="number" min="1" step="1" value="10" />
+          </div>
+        </div>
+        <div>
+          <button class="btn" id="btnAuto">Auto: Aus</button>
+          <button class="btn primary" id="btnSpin">Drehen</button>
+        </div>
+      </div>
+
+      <div class="log" id="log"></div>
+
+      <div class="payouts">
+        <table>
+          <thead><tr><th>Kombination (pro Gewinnlinie)</th><th>Auszahlung × Einsatz</th></tr></thead>
+          <tbody>
+            <tr><td>5× 7</td><td>100×</td></tr>
+            <tr><td>5× Kleeblatt</td><td>50×</td></tr>
+            <tr><td>5× Hufeisen</td><td>25×</td></tr>
+            <tr><td>5× Zitrone</td><td>10×</td></tr>
+            <tr><td>5× Kirsche</td><td>5×</td></tr>
+            <tr><td>4 gleiche (links anliegend)</td><td>30% des 5er-Werts</td></tr>
+            <tr><td>3 gleiche (links anliegend)</td><td>1×</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<script>
+// === Konfiguration ===
+const SYMBOLS = [
+  { id:'KIR', weight: 30, cls:'sym-cherry', label:'Kirsche' },
+  { id:'ZIT', weight: 24, cls:'sym-lemon',  label:'Zitrone' },
+  { id:'HUF', weight: 16, cls:'sym-horseshoe', label:'Hufeisen' },
+  { id:'KLEE',weight: 10, cls:'sym-clover', label:'Kleeblatt' },
+  { id:'SIEBEN', weight: 4, cls:'sym-seven', label:'Sieben' },
+];
+const PAYOUTS = { SIEBEN:100, KLEE:50, HUF:25, ZIT:10, KIR:5 };
+const LINES = [
+  [0,0,0,0,0], // oben
+  [1,1,1,1,1], // mitte
+  [2,2,2,2,2], // unten
+  [0,1,2,1,0], // V
+  [2,1,0,1,2], // umgekehrtes V
+];
+
+// === Zustand ===
+const STATE = {
+  reels: 5,
+  rows: 3,
+  credits: Number(localStorage.getItem('slot_credits') ?? 1000),
+  lastWin: 0,
+  totalIn: 0,
+  totalOut: 0,
+  auto: false,
+  spinning: false,
+  seed: localStorage.getItem('slot_seed') || String(Math.floor(Math.random()*1e9)),
+};
+
+// PRNG (Mulberry32), seedbar
+function makePRNG(seedStr){
+  let h = 1779033703 ^ seedStr.length;
+  for (let i=0;i<seedStr.length;i++){
+    h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
+    h = (h<<13) | (h>>>19);
+  }
+  return function(){
+    h = Math.imul(h ^ (h>>>16), 2246822507);
+    h = Math.imul(h ^ (h>>>13), 3266489909);
+    h ^= h>>>16;
+    return (h>>>0) / 4294967296;
+  }
+}
+let rnd = makePRNG(STATE.seed);
+
+function weightedPick(){
+  const total = SYMBOLS.reduce((a,s)=>a+s.weight,0);
+  let r = rnd()*total;
+  for(const s of SYMBOLS){ if((r-=s.weight)<=0) return s.id; }
+  return SYMBOLS[SYMBOLS.length-1].id;
+}
+
+function getSym(id){ return SYMBOLS.find(s=>s.id===id); }
+
+// DOM Referenzen
+const reelsEl = document.getElementById('reels');
+const linesSvg = document.getElementById('paylines');
+const creditsEl = document.getElementById('credits');
+const lastWinEl = document.getElementById('lastWin');
+const rtpEl = document.getElementById('rtp');
+const seedEl = document.getElementById('seed');
+const logEl = document.getElementById('log');
+const btnSpin = document.getElementById('btnSpin');
+const btnAuto = document.getElementById('btnAuto');
+const btnSeed = document.getElementById('btnSeed');
+const betInput = document.getElementById('bet');
+const machine = document.getElementById('machine');
+
+seedEl.textContent = STATE.seed;
+
+// Reels vorbereiten
+const reelNodes = [];
+for(let r=0;r<STATE.reels;r++){
+  const reel = document.createElement('div');
+  reel.className = 'reel';
+  const symbolsWrap = document.createElement('div');
+  symbolsWrap.className = 'symbols';
+  reel.appendChild(symbolsWrap);
+
+  const STRIP_LEN = 40;
+  for(let i=0;i<STRIP_LEN;i++){
+    const id = weightedPick();
+    const div = document.createElement('div');
+    div.className='symbol '+getSym(id).cls;
+    div.dataset.id = id;
+    div.setAttribute('aria-label', getSym(id).label);
+    symbolsWrap.appendChild(div);
+  }
+  reelsEl.appendChild(reel);
+  reelNodes.push({reel, symbols:symbolsWrap, offset:0});
+}
+
+// Paylines SVG zeichnen
+function drawPaylines(){
+  const W=500, H=180; // viewBox
+  const colW = W/STATE.reels; const rowH = H/STATE.rows;
+  linesSvg.innerHTML = '';
+  LINES.forEach((rows, idx)=>{
+    const p = rows.map((row, i)=>`${i*colW + colW/2},${row*rowH + rowH/2}`).join(' ');
+    const path = document.createElementNS('http://www.w3.org/2000/svg','polyline');
+    path.setAttribute('points', p);
+    path.setAttribute('fill','none');
+    path.setAttribute('class','line line-'+idx);
+    linesSvg.appendChild(path);
+  });
+}
+
+drawPaylines();
+
+function setCredits(v){ STATE.credits = v; localStorage.setItem('slot_credits', String(v)); creditsEl.textContent = v; }
+function setLastWin(v){ STATE.lastWin = v; lastWinEl.textContent = v; }
+function setSeed(newSeed){ STATE.seed = newSeed; localStorage.setItem('slot_seed', String(newSeed)); seedEl.textContent = newSeed; rnd = makePRNG(newSeed); }
+function log(msg){ const time = new Date().toLocaleTimeString(); logEl.innerHTML = `<div><b>${time}</b> – ${msg}</div>` + logEl.innerHTML; }
+
+// Sichtbare IDs aller 3 Reihen je Walze ermitteln
+function visibleGrid(){
+  const grid = []; // [reel][row]
+  for(const rn of reelNodes){
+    const rect = rn.reel.getBoundingClientRect();
+    const rowCenters = [rect.top+30, rect.top+90, rect.top+150];
+    const ids = [null,null,null];
+    const symbols = [...rn.symbols.children];
+    for(const s of symbols){
+      const r = s.getBoundingClientRect();
+      const cy = r.top + r.height/2;
+      let best=0, dmin=1e9;
+      for(let row=0;row<3;row++){ const d=Math.abs(cy-rowCenters[row]); if(d<dmin){dmin=d; best=row;} }
+      if(ids[best]===null || Math.abs((s.getBoundingClientRect().top+s.getBoundingClientRect().height/2)-rowCenters[best]) <
+         Math.abs((document.querySelector(`[data-id="${ids[best]}"]`)?.getBoundingClientRect()?.top||0)-rowCenters[best])){
+        ids[best]=s.dataset.id;
+      }
+    }
+    grid.push(ids.map(id=>id||'KIR'));
+  }
+  return grid;
+}
+
+function evaluateLines(grid, bet){
+  // grid: [reel][row]
+  let totalWin = 0; const hits = [];
+  LINES.forEach((rows, lineIdx)=>{
+    // hole die IDs entlang der Linie von links nach rechts
+    const seq = rows.map((row, col)=> grid[col][row]);
+    // zähle linksliegende Serie gleicher Symbole
+    let count = 1; let sym = seq[0];
+    for(let i=1;i<seq.length;i++){
+      if(seq[i]===sym) count++; else break;
+    }
+    if(count>=3){
+      let mult = 0;
+      if(count===3) mult = 1;
+      else if(count===4) mult = Math.floor((PAYOUTS[sym]||0) * 0.3);
+      else if(count===5) mult = (PAYOUTS[sym]||0);
+      const win = mult * bet;
+      totalWin += win;
+      hits.push({lineIdx, sym, count, mult, win, pattern: seq.join(' | ')});
+    }
+  });
+  return { totalWin, hits };
+}
+
+async function spin(){
+  if(STATE.spinning) return;
+  const bet = Math.max(1, Math.floor(Number(betInput.value)||1));
+  if(STATE.credits < bet){ log('Zu wenig Credits.'); return; }
+  STATE.spinning = true; btnSpin.disabled = true; btnAuto.disabled = true; btnSeed.disabled = true; betInput.disabled = true;
+
+  setCredits(STATE.credits - bet); STATE.totalIn += bet;
+
+  const DURATION_BASE = 1300; const STAGGER = 220;
+  const anim = reelNodes.map((rn,i)=>({ start: performance.now()+i*STAGGER, duration: DURATION_BASE + i*180 + (rnd()*250|0), last:0, height:60, stripLen: rn.symbols.children.length }));
+
+  return new Promise(resolve=>{
+    function frame(t){
+      let allDone = true;
+      for(let i=0;i<reelNodes.length;i++){
+        const rn = reelNodes[i]; const a = anim[i]; const elapsed = t - a.start;
+        if(elapsed < 0){ allDone = false; continue; }
+        if(elapsed < a.duration){
+          allDone = false;
+          const p = Math.min(1, elapsed / a.duration);
+          const ease = 1 - Math.pow(1-p, 3);
+          const spd = 12*(1 - ease) + 1.5;
+          a.last = (a.last + spd) % (a.height * a.stripLen);
+          rn.symbols.style.transform = `translateY(${-a.last}px)`;
+        } else {
+          const mod = a.last % a.height; const snap = a.last - mod + (mod > a.height/2 ? a.height : 0);
+          rn.symbols.style.transform = `translateY(${-snap}px)`;
+        }
+      }
+      if(!allDone){ requestAnimationFrame(frame); }
+      else {
+        const grid = visibleGrid();
+        const { totalWin, hits } = evaluateLines(grid, bet);
+        setLastWin(totalWin); STATE.totalOut += totalWin; setCredits(STATE.credits + totalWin);
+        const rtp = STATE.totalIn ? (STATE.totalOut/STATE.totalIn*100).toFixed(1)+'%' : '–';
+        rtpEl.textContent = rtp;
+        if(totalWin>0){
+          machine.classList.remove('flash-win'); void machine.offsetWidth; machine.classList.add('flash-win');
+          hits.forEach(h=> log(`Linie ${h.lineIdx+1}: <b>${h.count}× ${getSym(h.sym).label}</b> (x${h.mult}). Seq: ${h.pattern}. Gewinn: <b>${h.win}</b>.`));
+        } else {
+          log('Niete.');
+        }
+        STATE.spinning = false; btnSpin.disabled = false; btnAuto.disabled = false; btnSeed.disabled = false; betInput.disabled = false;
+        resolve();
+      }
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+btnSpin.addEventListener('click', async()=>{ await spin(); if(STATE.auto){ setTimeout(()=>btnSpin.click(), 300); } });
+btnAuto.addEventListener('click', ()=>{ STATE.auto=!STATE.auto; btnAuto.textContent = `Auto: ${STATE.auto?'An':'Aus'}`; if(STATE.auto && !STATE.spinning){ btnSpin.click(); } });
+btnSeed.addEventListener('click', ()=>{ setSeed(String(Math.floor(Math.random()*1e9))); log('Neuer Seed gesetzt.'); });
+
+// Init
+setCredits(STATE.credits); setLastWin(STATE.lastWin); log('Bereit. Drücke „Drehen“.');
+</script>
+</body>
+</html>
+ 
