@@ -155,9 +155,10 @@ function autoscale(){
 window.addEventListener('resize', autoscale);
 window.addEventListener('orientationchange', autoscale);
 
-// --- Audio: klassischer Gambling-Sound ---
+// --- Audio: Abfallende Tonleiter während Spin ---
 let audioCtx = null;
-let spinNodes = null;
+let spinActive = false;
+let spinTimer = null;
 
 function ensureAudio(){
   if(!audioCtx){
@@ -167,61 +168,64 @@ function ensureAudio(){
   if(audioCtx.state === 'suspended'){ audioCtx.resume(); }
 }
 
-function startSpinSound(){
+// Spielt einen kurzen „plucked“ Ton (saw → lowpass → gain env)
+function playNote(freq=880, dur=0.12){
   ensureAudio();
-  stopSpinSound();
-
-  // Whoosh: zwei leicht verstimmte Sägezahn-Oszillatoren + Lowpass + Gain
   const osc1 = audioCtx.createOscillator();
   const osc2 = audioCtx.createOscillator();
   osc1.type = 'sawtooth'; osc2.type = 'sawtooth';
-  osc1.frequency.value = 180; osc2.frequency.value = 184;
-
-  const lfo = audioCtx.createOscillator(); // leichtes Vibrato
-  lfo.frequency.value = 4;
-  const lfoGain = audioCtx.createGain(); lfoGain.gain.value = 6; // Hz Modulation
-  lfo.connect(lfoGain);
-  lfoGain.connect(osc1.frequency);
-  lfoGain.connect(osc2.frequency);
+  osc1.frequency.value = freq; osc2.frequency.value = freq*1.01;
 
   const lp = audioCtx.createBiquadFilter();
-  lp.type = 'lowpass'; lp.frequency.value = 1200; lp.Q.value = 0.7;
+  lp.type = 'lowpass'; lp.frequency.value = 1400; lp.Q.value = 0.6;
 
   const gain = audioCtx.createGain();
-  gain.gain.value = 0.0001; // Start leise
+  gain.gain.value = 0.0001;
 
   osc1.connect(lp); osc2.connect(lp);
-  lp.connect(gain);
-  gain.connect(audioCtx.destination);
+  lp.connect(gain); gain.connect(audioCtx.destination);
 
-  // Attack/Decay Hüllkurve
   const now = audioCtx.currentTime;
-  gain.gain.cancelScheduledValues(now);
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.06, now + 0.12);
+  gain.gain.exponentialRampToValueAtTime(0.05, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+  osc1.start(now); osc2.start(now);
+  osc1.stop(now + dur + 0.02); osc2.stop(now + dur + 0.02);
+}
 
-  osc1.start(); osc2.start(); lfo.start();
+// Erzeugt eine fallende Tonleiter (z. B. 8 Stufen), wiederholt solange spinActive=true
+const SCALE_STEPS = 8;
+const STEP_INTERVAL_MS = 110; // Tempo
+const BASE_FREQ = 1200; // Startfrequenz
+const SEMITONE = 2 ** (1/12);
 
-  spinNodes = {osc1, osc2, lfo, lp, gain};
+function scheduleDescendingScale(){
+  if(!spinActive) return;
+  // 8 Stufen abwärts über eine Moll-Pentatonik-ähnliche Auswahl für „casino vibe“
+  // Wir nutzen gleichmäßige Halbtöne für Einfachheit
+  for(let i=0;i<SCALE_STEPS;i++){
+    const f = BASE_FREQ / (SEMITONE ** i);
+    setTimeout(()=>{ if(spinActive) playNote(f, 0.10); }, i*STEP_INTERVAL_MS);
+  }
+  // Nächste Runde nach letztem Step
+  spinTimer = setTimeout(()=>{
+    if(spinActive) scheduleDescendingScale();
+  }, SCALE_STEPS*STEP_INTERVAL_MS + 10);
+}
+
+function startSpinSound(){
+  ensureAudio();
+  stopSpinSound();
+  spinActive = true;
+  scheduleDescendingScale();
 }
 
 function stopSpinSound(){
-  if(!spinNodes || !audioCtx) return;
-  const {osc1, osc2, lfo, gain} = spinNodes;
-  const now = audioCtx.currentTime;
-  // sanft ausblenden
-  try{
-    gain.gain.cancelScheduledValues(now);
-    gain.gain.setTargetAtTime(0.0001, now, 0.06);
-  }catch(e){}
-  setTimeout(()=>{
-    try{ osc1.stop(); osc2.stop(); lfo.stop(); }catch(e){}
-    spinNodes = null;
-  }, 180);
+  spinActive = false;
+  if(spinTimer){ clearTimeout(spinTimer); spinTimer = null; }
 }
 
+// Tick beim Walzenstopp
 function tickStop(){
-  // kurzer Tick beim Walzenstopp
   ensureAudio();
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
@@ -234,10 +238,11 @@ function tickStop(){
   osc.stop(now + 0.08);
 }
 
+// Gewinnklang
 function winChime(mult=1){
   ensureAudio();
   const base = 880; // A5
-  const freqs = [base, base*5/4, base*3/2]; // Dur-Dreiklang
+  const freqs = [base, base*5/4, base*3/2];
   const now = audioCtx.currentTime;
   freqs.forEach((f,i)=>{
     const osc = audioCtx.createOscillator();
@@ -283,7 +288,6 @@ async function spin(){
           const mod = a.lastPx % 60; const snap = a.lastPx - mod + (mod > 30 ? 60 : 0);
           rn.symbols.style.transform = `translateY(${-snap}px)`;
           rn.topIndex = Math.round(snap / 60) % 40;
-          // Tick pro Walze beim Stop
           if(!a.ticked){ tickStop(); a.ticked = true; }
         }
       }

@@ -43,7 +43,6 @@ body{
   background:#0a1018; border:1px solid #1c2736; 
   box-shadow:inset 0 8px 18px rgba(0,0,0,.35)
 }
-/* leichte seitliche Kante je Walze verbessert diagonale Lesbarkeit */
 .reel::after{
   content:""; position:absolute; top:0; bottom:0; right:-3px; width:3px;
   background: linear-gradient(180deg,transparent, rgba(255,255,255,.06), transparent);
@@ -52,7 +51,7 @@ body{
 .symbols{ position:absolute; left:0; right:0; will-change:transform }
 .symbol{ height:60px; display:flex; align-items:center; justify-content:center; border-bottom:1px solid #0f1824 }
 .symbol:nth-child(odd){ background:rgba(255,255,255,.02) }
-/* Emoji-Size: Base, etwas kleiner wegen schmalerer Walzen */
+/* Emoji-Size */
 .symbol{ font-size:32px; line-height:1; }
 @media (min-width:420px){ .symbol{ font-size:36px; } }
 
