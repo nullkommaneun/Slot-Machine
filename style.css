@@ -5,10 +5,15 @@
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
-  margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; color:#e6edf3;
+  margin:0; 
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji','EmojiOne Color','Twemoji Mozilla','Segoe UI Symbol',sans-serif; 
+  color:#e6edf3;
   background:radial-gradient(1200px 700px at 50% -10%, #1b2330 0%, #0b0f14 60%);
   display:flex; flex-direction:column;
   min-height:100svh;
+  text-rendering:optimizeLegibility;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  font-synthesis-weight:none; font-synthesis-style:none;
 }
 .site-header{ padding: var(--pad); text-align:center }
 .site-header h1{ margin:0 0 6px 0; font-weight:700; letter-spacing:.5px }
@@ -36,23 +41,26 @@ body{
   display:grid; grid-template-columns: repeat(5,1fr); 
   gap:6px; padding:8px; border-radius:16px; 
   background:#0b121b; border:1px solid #1f2a3a; 
-  width:520px; margin-inline:auto 
+  width:520px; margin-inline:auto; 
+  will-change:transform;
 }
+.reels.hidden{ visibility:hidden }
 .reel{ 
   height:180px; overflow:hidden; position:relative; border-radius:10px; 
   background:#0a1018; border:1px solid #1c2736; 
-  box-shadow:inset 0 8px 18px rgba(0,0,0,.35)
+  box-shadow:inset 0 8px 18px rgba(0,0,0,.35);
+  will-change:transform;
 }
 .reel::after{
   content:""; position:absolute; top:0; bottom:0; right:-3px; width:3px;
   background: linear-gradient(180deg,transparent, rgba(255,255,255,.06), transparent);
 }
 
-.symbols{ position:absolute; left:0; right:0; will-change:transform }
-.symbol{ height:60px; display:flex; align-items:center; justify-content:center; border-bottom:1px solid #0f1824 }
+.symbols{ position:absolute; left:0; right:0; will-change:transform; backface-visibility:hidden; transform:translateZ(0) }
+.symbol{ height:60px; display:flex; align-items:center; justify-content:center; border-bottom:1px solid #0f1824; contain:content }
 .symbol:nth-child(odd){ background:rgba(255,255,255,.02) }
 /* Emoji-Size */
-.symbol{ font-size:32px; line-height:1; }
+.symbol{ font-size:34px; line-height:1; font-variant-emoji:emoji; }
 @media (min-width:420px){ .symbol{ font-size:36px; } }
 
 /* --- Gewinnlinien-Overlay --- */

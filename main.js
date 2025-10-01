@@ -39,7 +39,7 @@ function makePRNG(seedStr){
   }
 }
 let rnd = makePRNG(STATE.seed);
-function r(min,max){ return min + Math.random()*(max-min); } // UI randomness (nicht seedbar)
+function r(min,max){ return min + Math.random()*(max-min); } // UI randomness
 
 function weightedPick(){
   const total = SYMBOLS.reduce((a,s)=>a+s.weight,0);
@@ -66,7 +66,7 @@ const hitOverlay = document.getElementById('hitOverlay');
 
 seedEl.textContent = STATE.seed;
 
-// Overlay-Zellen erzeugen (3 Zeilen × 5 Spalten)
+// Overlay-Zellen erzeugen
 for(let row=0; row<3; row++){
   for(let col=0; col<5; col++){
     const d = document.createElement('div');
@@ -101,14 +101,34 @@ for(let rI=0;rI<STATE.reels;rI++){
     const sym = getSym(id);
     div.dataset.id = id;
     div.setAttribute('aria-label', sym.label);
-    div.textContent = sym.emoji;
+    // Emoji + NBSP Fallback, falls Emoji-Font initial nicht rendert
+    div.textContent = sym.emoji + '\u00a0';
     symbolsWrap.appendChild(div);
   }
-
   reelsEl.appendChild(reel);
-  reelNodes.push({reel, symbols:symbolsWrap, offsetPx:0, topIndex:0});
+  reelNodes.push({reel, symbols:symbolsWrap, px:0, topIndex:0});
 }
 
+// Zeige Reels erst, wenn Fonts bereit sind (reduziert „leere“ Render-Frames)
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(()=>{ reelsEl.classList.remove('hidden'); reelsEl.removeAttribute('aria-busy'); ensureEmojis(); });
+} else {
+  // Fallback
+  setTimeout(()=>{ reelsEl.classList.remove('hidden'); reelsEl.removeAttribute('aria-busy'); ensureEmojis(); }, 100);
+}
+
+// Emoji-„Heiler“: erzwungener Repaint & Re-Assign falls ein Feld leer wäre
+function ensureEmojis(){
+  const cells = reelsEl.querySelectorAll('.symbol');
+  cells.forEach(c=>{
+    if(!c.textContent || c.textContent.trim()===''){
+      const id = c.dataset.id; const e = getSym(id).emoji;
+      c.textContent = e + '\u00a0';
+    }
+  });
+}
+
+// Werte setzen
 function setCredits(v){ STATE.credits = v; localStorage.setItem('slot_credits', String(v)); creditsEl.textContent = v; }
 function setLastWin(v){ STATE.lastWin = v; lastWinEl.textContent = v; }
 function setSeed(newSeed){ STATE.seed = newSeed; localStorage.setItem('slot_seed', String(newSeed)); seedEl.textContent = newSeed; rnd = makePRNG(newSeed); }
@@ -134,12 +154,8 @@ function bestRunOnLine(seq){
   let bestLen = 1, bestSym = seq[0], bestStart = 0;
   let curLen = 1, curStart = 0;
   for(let i=1;i<seq.length;i++){
-    if(seq[i] === seq[i-1]){
-      curLen++;
-    } else {
-      if(curLen > bestLen){ bestLen = curLen; bestSym = seq[i-1]; bestStart = curStart; }
-      curLen = 1; curStart = i;
-    }
+    if(seq[i] === seq[i-1]){ curLen++; }
+    else { if(curLen > bestLen){ bestLen = curLen; bestSym = seq[i-1]; bestStart = curStart; } curLen = 1; curStart = i; }
   }
   if(curLen > bestLen){ bestLen = curLen; bestSym = seq[seq.length-1]; bestStart = curStart; }
   return { len: bestLen, sym: bestSym, start: bestStart };
@@ -164,6 +180,7 @@ function evaluateLines(grid, bet){
 }
 
 // Treffer-Overlay setzen
+function clearHits(){ [...hitOverlay.children].forEach(c=>{ c.className='hit'; }); }
 function showHits(hits){
   clearHits();
   hits.forEach(h=>{
@@ -173,7 +190,6 @@ function showHits(hits){
       markCell(row, col, h.sym);
     }
   });
-  // nach 1.6s wieder löschen
   setTimeout(clearHits, 1600);
 }
 
@@ -194,10 +210,8 @@ function autoscale(){
 window.addEventListener('resize', autoscale);
 window.addEventListener('orientationchange', autoscale);
 
-// --- Audio (wie v6, gekürzt) ---
-let audioCtx = null;
-let spinActive = false;
-let spinTimer = null;
+// --- Audio (kompakt, wie zuvor) ---
+let audioCtx = null; let spinActive = false; let spinTimer = null;
 function ensureAudio(){ if(!audioCtx){ const Ctx = window.AudioContext || window.webkitAudioContext; audioCtx = new Ctx(); } if(audioCtx.state === 'suspended'){ audioCtx.resume(); } }
 function playNote(freq=880, dur=0.10){
   ensureAudio();
@@ -206,53 +220,24 @@ function playNote(freq=880, dur=0.10){
   const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1300; lp.Q.value = 0.7;
   const gain = audioCtx.createGain(); gain.gain.value = 0.0001;
   osc1.connect(lp); osc2.connect(lp); lp.connect(gain); gain.connect(audioCtx.destination);
-  const now = audioCtx.currentTime;
-  gain.gain.exponentialRampToValueAtTime(0.05, now + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+  const now = audioCtx.currentTime; gain.gain.exponentialRampToValueAtTime(0.05, now + 0.015); gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
   osc1.start(now); osc2.start(now); osc1.stop(now + dur + 0.02); osc2.stop(now + dur + 0.02);
 }
 const SEMITONE = 2 ** (1/12);
 function scheduleDescendingScale(){
   if(!spinActive) return;
-  const steps = Math.floor(r(6, 10));
-  const base = r(950, 1400);
-  let t = 0;
-  for(let i=0;i<steps;i++){
-    const jitter = r(-20, 20);
-    const interval = r(70, 120) + jitter;
-    const f = base / (SEMITONE ** i);
-    setTimeout(()=>{ if(spinActive) playNote(f, 0.09); }, t);
-    t += interval;
-  }
+  const steps = Math.floor(r(6, 10)); const base = r(950, 1400);
+  let t = 0; for(let i=0;i<steps;i++){ const interval = r(70, 120) + r(-20, 20); const f = base / (SEMITONE ** i); setTimeout(()=>{ if(spinActive) playNote(f, 0.09); }, t); t += interval; }
   spinTimer = setTimeout(()=>{ if(spinActive) scheduleDescendingScale(); }, t + 30);
 }
 function startSpinSound(){ ensureAudio(); stopSpinSound(); spinActive = true; scheduleDescendingScale(); }
 function stopSpinSound(){ spinActive = false; if(spinTimer){ clearTimeout(spinTimer); spinTimer = null; } }
-function tickStop(){
-  ensureAudio();
-  const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
-  osc.type = 'square'; osc.frequency.value = 900 + (Math.random()*80-40);
-  gain.gain.value = 0.05; osc.connect(gain); gain.connect(audioCtx.destination);
-  const now = audioCtx.currentTime; osc.start(now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06); osc.stop(now + 0.08);
-}
-function winChime(mult=1){
-  ensureAudio();
-  const base = 880; const shift = Math.random()>0.5 ? 1 : -1;
-  const freqs = [base, base*5/4, base*3/2].map(f=> f * (1 + 0.02*shift));
-  const now = audioCtx.currentTime;
-  freqs.forEach((f,i)=>{
-    const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
-    osc.type = 'sine'; osc.frequency.value = f; gain.gain.value = 0.0001;
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.start(now + i*0.02);
-    gain.gain.exponentialRampToValueAtTime(0.04*Math.min(2, mult/10+1), now + i*0.02 + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35 + i*0.02);
-    osc.stop(now + 0.4 + i*0.02);
-  });
-}
+function tickStop(){ ensureAudio(); const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.type='square'; o.frequency.value = 900 + (Math.random()*80-40); g.gain.value=0.05; o.connect(g); g.connect(audioCtx.destination); const now=audioCtx.currentTime; o.start(now); g.gain.exponentialRampToValueAtTime(0.001, now + 0.06); o.stop(now + 0.08); }
+function winChime(mult=1){ ensureAudio(); const base=880; const shift=Math.random()>0.5?1:-1; const freqs=[base, base*5/4, base*3/2].map(f=> f*(1+0.02*shift)); const now=audioCtx.currentTime; freqs.forEach((f,i)=>{ const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); o.type='sine'; o.frequency.value=f; g.gain.value=0.0001; o.connect(g); g.connect(audioCtx.destination); o.start(now+i*0.02); g.gain.exponentialRampToValueAtTime(0.04*Math.min(2, mult/10+1), now+i*0.02+0.02); g.gain.exponentialRampToValueAtTime(0.0001, now+0.35+i*0.02); o.stop(now+0.4+i*0.02); }); }
 
-// --- Spin (mit extra Randomness) ---
-function shuffledIndices(n){ const arr = Array.from({length:n}, (_,i)=>i); for(let i=n-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+// --- Smoother Roll + Snap-In ---
+function eased(t){ return 1 - Math.pow(1-t, 3); } // easeOutCubic
+function easeOutBack(t){ const c1 = 1.70158; const c3 = c1 + 1; return 1 + c3*Math.pow(t-1,3) + c1*Math.pow(t-1,2); }
 
 async function spin(){
   if(STATE.spinning) return;
@@ -262,23 +247,16 @@ async function spin(){
 
   setCredits(STATE.credits - bet); STATE.totalIn += bet;
 
-  // zufällige Start-/Stopp-Reihenfolge + per-Reel Startoffset
-  const ORDER = shuffledIndices(STATE.reels);
-  const BASE = 780; const STAGGER = 120;
+  const ORDER = Array.from({length:STATE.reels}, (_,i)=>i).sort(()=>Math.random()-0.5);
+  const BASE = 820; const STAGGER = 120;
   const anim = reelNodes.map((rn,i)=>{
     const orderIdx = ORDER.indexOf(i);
-    const startOffsetPx = Math.floor(r(0, 60*40)); // zufälliger Startoffset -> beeinflusst Endposition
-    rn.symbols.style.transform = `translateY(${-startOffsetPx}px)`; // visueller Start
-    return {
-      start: performance.now() + orderIdx*STAGGER + r(-40, 60),
-      duration: BASE + orderIdx*120 + r(0,180),
-      lastPx: startOffsetPx
-    };
+    return { start: performance.now()+orderIdx*STAGGER + r(-40,50), duration: BASE + orderIdx*120 + r(0,160), px: rn.px||0 };
   });
 
   startSpinSound();
 
-  return new Promise(resolve=>{
+  function animateReels(resolve){
     function frame(t){
       let allDone = true;
       for(let i=0;i<reelNodes.length;i++){
@@ -286,65 +264,68 @@ async function spin(){
         if(elapsed < 0){ allDone = false; continue; }
         if(elapsed < a.duration){
           allDone = false;
-          const p = Math.min(1, elapsed / a.duration);
-          const ease = 1 - Math.pow(1-p, 3);
-          const jitter = (Math.random()*0.8);
-          const spd = (12.5*(1 - ease) + 1.8) + jitter;
-          a.lastPx = (a.lastPx + spd) % (60 * 40);
-          rn.symbols.style.transform = `translateY(${-a.lastPx}px)`;
+          const p = Math.min(1, elapsed/a.duration);
+          const spd = (12.0*(1 - eased(p)) + 1.6) + Math.random()*0.6;
+          a.px = (a.px + spd) % (SYMBOL_H * STRIP_LEN);
+          rn.symbols.style.transform = `translateY(${-a.px}px)`;
         } else {
-          const mod = a.lastPx % 60; const snap = a.lastPx - mod + (mod > 30 ? 60 : 0);
-          rn.symbols.style.transform = `translateY(${-snap}px)`;
-          rn.topIndex = Math.round(snap / 60) % 40;
-          if(!a.ticked){ tickStop(); a.ticked = true; }
+          // Snap-Phase mit „Back“-Easing
+          const mod = a.px % SYMBOL_H;
+          const snapTarget = a.px - mod + (mod > SYMBOL_H/2 ? SYMBOL_H : 0);
+          const startPx = a.px;
+          const snapDur = 180;
+          const t0 = performance.now();
+          (function snapStep(ts){
+            const tt = Math.min(1, (ts - t0)/snapDur);
+            const k = easeOutBack(tt);
+            const px = startPx + (snapTarget - startPx)*k;
+            rn.symbols.style.transform = `translateY(${-px}px)`;
+            if(tt < 1){ requestAnimationFrame(snapStep); }
+            else {
+              rn.px = snapTarget;
+              rn.topIndex = Math.round(snapTarget / SYMBOL_H) % STRIP_LEN;
+              if(!a.ticked){ tickStop(); a.ticked = true; }
+            }
+          })(performance.now());
         }
       }
       if(!allDone){ requestAnimationFrame(frame); }
       else {
-        stopSpinSound();
-        const grid = currentGrid();
-        const { totalWin, hits } = evaluateLines(grid, bet);
-        setLastWin(totalWin); STATE.totalOut += totalWin; setCredits(STATE.credits + totalWin);
-        const rtp = STATE.totalIn ? (STATE.totalOut/STATE.totalIn*100).toFixed(1)+'%' : '–';
-        rtpEl.textContent = rtp;
-        if(totalWin>0){
-          showHits(hits);
-          machine.classList.remove('flash-win'); void machine.offsetWidth; machine.classList.add('flash-win');
-          hits.forEach(h=> log(`Linie ${h.lineIdx+1}: <b>${getSym(h.sym).label}</b> ×${h.count} (x${h.mult}). Gewinn: <b>${h.win}</b>.`));
-          const topHit = hits.reduce((a,b)=> (a && a.mult > b.mult ? a : b), null);
-          winChime(topHit ? topHit.mult : 1);
-        } else { clearHits(); log('Niete.'); }
-        STATE.spinning = false; btnSpin.disabled = false; btnAuto.disabled = false; btnSeed.disabled = false; betInput.disabled = false;
-        resolve();
+        // Warte, bis alle Snap-Steps fertig sind
+        setTimeout(()=>{
+          stopSpinSound();
+          ensureEmojis();
+          const grid = currentGrid();
+          const { totalWin, hits } = evaluateLines(grid, bet);
+          setLastWin(totalWin); STATE.totalOut += totalWin; setCredits(STATE.credits + totalWin);
+          const rtp = STATE.totalIn ? (STATE.totalOut/STATE.totalIn*100).toFixed(1)+'%' : '–';
+          rtpEl.textContent = rtp;
+          if(totalWin>0){
+            showHits(hits);
+            machine.classList.remove('flash-win'); void machine.offsetWidth; machine.classList.add('flash-win');
+            hits.forEach(h=> log(`Linie ${h.lineIdx+1}: <b>${getSym(h.sym).label}</b> ×${h.count} (x${h.mult}). Gewinn: <b>${h.win}</b>.`));
+            const topHit = hits.reduce((a,b)=> (a && a.mult > b.mult ? a : b), null);
+            winChime(topHit ? topHit.mult : 1);
+          } else { clearHits(); log('Niete.'); }
+          STATE.spinning = false; btnSpin.disabled = false; btnAuto.disabled = false; btnSeed.disabled = false; betInput.disabled = false;
+          resolve();
+        }, 220);
       }
     }
     requestAnimationFrame(frame);
-  });
+  }
+
+  return new Promise(resolve=> animateReels(resolve));
 }
 
-btnSpin.addEventListener('click', async()=>{ 
-  await spin(); 
-  if(STATE.auto){ setTimeout(()=>btnSpin.click(), Math.floor(r(160, 360))); }
-});
+btnSpin.addEventListener('click', async()=>{ await spin(); if(STATE.auto){ setTimeout(()=>btnSpin.click(), Math.floor(r(160, 360))); } });
 btnAuto.addEventListener('click', ()=>{ STATE.auto=!STATE.auto; btnAuto.textContent = `Auto: ${STATE.auto?'An':'Aus'}`; if(STATE.auto && !STATE.spinning){ btnSpin.click(); } });
 btnSeed.addEventListener('click', ()=>{ setSeed(String(Math.floor(Math.random()*1e9))); log('Neuer Seed gesetzt.'); });
 
 // Init
-function autoscale(){
-  scaleWrap.style.transform = 'scale(1)';
-  const rect = scaleWrap.getBoundingClientRect();
-  const pad = 16;
-  const header = document.querySelector('.site-header');
-  const headerH = header ? header.getBoundingClientRect().height : 0;
-  const availW = window.innerWidth - pad*2;
-  const availH = window.innerHeight - headerH - pad*2;
-  const sx = availW / rect.width;
-  const sy = availH / rect.height;
-  const s = Math.min(sx, sy, 1);
-  scaleWrap.style.transform = `translateZ(0) scale(${s})`;
-}
+function autoscale(){ scaleWrap.style.transform = 'scale(1)'; const rect = scaleWrap.getBoundingClientRect(); const pad=16; const header=document.querySelector('.site-header'); const headerH=header?header.getBoundingClientRect().height:0; const availW=window.innerWidth-pad*2; const availH=window.innerHeight-headerH-pad*2; const sx=availW/rect.width; const sy=availH/rect.height; const s=Math.min(sx, sy, 1); scaleWrap.style.transform = `translateZ(0) scale(${s})`; }
 setCredits(STATE.credits); setLastWin(STATE.lastWin); log('Bereit. Drücke „Drehen“.');
 window.addEventListener('resize', autoscale);
 window.addEventListener('orientationchange', autoscale);
-window.addEventListener('load', autoscale);
-setTimeout(autoscale, 50);
+window.addEventListener('load', ()=>{ autoscale(); ensureEmojis(); });
+setTimeout(()=>{ autoscale(); ensureEmojis(); }, 80);
