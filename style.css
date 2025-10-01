@@ -55,6 +55,26 @@ body{
 .symbol{ font-size:32px; line-height:1; }
 @media (min-width:420px){ .symbol{ font-size:36px; } }
 
+/* --- Gewinnlinien-Overlay --- */
+.hit-overlay{
+  position:absolute; inset:8px;  /* deckt reels genau ab */
+  display:grid; grid-template-rows: repeat(3, 60px); grid-template-columns: repeat(5, 1fr);
+  gap:6px; pointer-events:none;
+}
+.hit-overlay .hit{
+  border-radius:10px;
+  box-shadow: inset 0 0 0 0 rgba(29,209,161,0);
+  transition: box-shadow .15s ease;
+}
+.hit-overlay .hit.active{
+  box-shadow: inset 0 0 0 3px rgba(29,209,161,.85), 0 0 12px rgba(29,209,161,.35);
+}
+.hit-overlay .hit.sym-SIEBEN.active{ box-shadow: inset 0 0 0 3px rgba(230, 126, 34, .95), 0 0 14px rgba(230,126,34,.45); }
+.hit-overlay .hit.sym-KLEE.active{   box-shadow: inset 0 0 0 3px rgba(46, 204, 113, .95), 0 0 14px rgba(46,204,113,.45); }
+.hit-overlay .hit.sym-HUF.active{    box-shadow: inset 0 0 0 3px rgba(149, 165, 166, .95), 0 0 14px rgba(149,165,166,.45); }
+.hit-overlay .hit.sym-ZIT.active{    box-shadow: inset 0 0 0 3px rgba(241, 196, 15, .95), 0 0 14px rgba(241,196,15,.45); }
+.hit-overlay .hit.sym-KIR.active{    box-shadow: inset 0 0 0 3px rgba(231, 76, 60, .95), 0 0 14px rgba(231,76,60,.45); }
+
 .controls{ display:flex; gap:10px; align-items:center; justify-content:space-between; margin-top:12px; flex-wrap:wrap }
 .left-ctrl{ display:flex; gap:10px; align-items:center }
 .btn{ cursor:pointer; user-select:none; padding:10px 14px; border-radius:12px; border:1px solid #1e2b3a; background:#0e1622; color:#e6edf3; font-weight:700; letter-spacing:.4px; transition:.15s transform,.15s background }
